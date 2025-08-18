@@ -1,14 +1,13 @@
-# Relatório de Diferenças — versão admin UI
-- Apenas **admins (6266, 4144, 70029)** criam/editar/excluem relatórios.
-- Usuários comuns: apenas leitura dos **próprios** relatórios.
+# Relatório de Diferenças — MoveBuss (UI Restaurada)
 
-## Deploy
-npm i -g firebase-tools
-firebase login
-firebase init     # Hosting + Firestore + Storage (pasta 'public')
-firebase deploy
+- Layout fibra de carbono + verde bandeira (campos compactos).
+- Login/cadastro por matrícula (email gerado como `matricula@movebuss.local`).
+- Admins (6266, 4144, 70029): criar/editar/excluir relatórios, filtro por matrícula, resumo.
+- Usuários: visualizam apenas seus próprios relatórios; últimos 15 expandidos.
 
-## Firebase Console
-- Authentication: habilite e-mail/senha e adicione domínio `movebuss.local`.
-- Firestore Rules: publique o arquivo `firestore.rules`.
-- Storage Rules: publique o arquivo `storage.rules`.
+## Firebase
+Cole as regras em **Firestore** e **Storage** conforme arquivos `firestore.rules` e `storage.rules` deste pacote.
+
+## Observações
+- Autocálculo de Sobra/Falta = Dinheiro - Folha.
+- Pós conferência: somente admins podem editar/salvar/anexar/excluir imagens.

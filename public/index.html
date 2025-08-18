@@ -1,94 +1,105 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Relatório de Diferenças</title>
-  <link rel="stylesheet" href="styles.css" />
-  <script type="module" src="app.js" defer></script>
+  <link rel="stylesheet" href="styles.css">
+  <!-- Firebase v8 (compat com app atual) -->
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-auth.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-firestore.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-storage.js"></script>
+  <script defer src="app.js"></script>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <img src="logo.png" class="logo" alt="Logo" />
-      <span class="title">Relatório de Diferenças</span>
+      <img src="logo.png" alt="logo" class="logo">
+      <h1 class="title">Relatório de Diferenças</h1>
     </div>
-    <button id="logoutBtn" class="btn btn-metal hidden">Logout</button>
+    <button id="btnLogout" class="btn btn-metal hidden">Logout</button>
   </header>
 
-  <main id="authSection" class="auth-section">
-    <div class="card auth-card">
-      <h2>Login</h2>
-      <input id="loginMatricula" class="input sm" type="text" placeholder="Matrícula" />
-      <input id="loginSenha" class="input sm" type="password" placeholder="Senha" />
-      <button id="loginBtn" class="btn btn-metal">Entrar</button>
-      <div class="divider"></div>
-      <button id="showRegister" class="link">Cadastrar novo usuário</button>
-    </div>
-
-    <div class="card auth-card hidden" id="registerCard">
-      <h2>Cadastrar Usuário</h2>
-      <input id="regMatricula" class="input sm" type="text" placeholder="Matrícula" />
-      <input id="regNome" class="input sm" type="text" placeholder="Nome" />
-      <input id="regSenha" class="input sm" type="password" placeholder="Senha" />
-      <div class="row gap">
-        <button id="registerBtn" class="btn btn-metal">Registrar</button>
-        <button id="cancelRegister" class="btn btn-ghost">Cancelar</button>
+  <main>
+    <!-- Tela de Login / Cadastro -->
+    <section id="authView" class="auth-view">
+      <div class="card auth-card">
+        <h2>Login</h2>
+        <input id="loginMatricula" class="input sm" type="text" placeholder="Matrícula">
+        <input id="loginSenha" class="input sm" type="password" placeholder="Senha">
+        <button id="btnLogin" class="btn btn-metal">Entrar</button>
+        <div class="divider"></div>
+        <button id="btnShowRegister" class="link">Cadastrar novo usuário</button>
       </div>
-    </div>
+
+      <div class="card auth-card hidden" id="registerCard">
+        <h2>Cadastrar usuário</h2>
+        <input id="regMatricula" class="input sm" type="text" placeholder="Matrícula">
+        <input id="regNome" class="input sm" type="text" placeholder="Nome">
+        <input id="regSenha" class="input sm" type="password" placeholder="Senha">
+        <div class="row gap">
+          <button id="btnRegister" class="btn btn-metal">Registrar</button>
+          <button id="btnCancelRegister" class="btn btn-ghost">Cancelar</button>
+        </div>
+        <small class="hint">E-mail gerado automaticamente: <b>matricula@movebuss.local</b></small>
+      </div>
+    </section>
+
+    <!-- App -->
+    <section id="appView" class="hidden">
+      <div class="toolbar">
+        <div class="info">
+          <span id="userInfo"></span>
+          <span id="roleBadge" class="badge"></span>
+        </div>
+        <div id="adminControls" class="hidden">
+          <button id="btnToggleForm" class="btn btn-metal btn-admin">Novo Relatório</button>
+          <input id="adminFilterMat" class="input sm btn-admin" placeholder="Pesquisar matrícula">
+          <button id="btnResumo" class="btn btn-ghost btn-admin">Resumo do Recebedor</button>
+        </div>
+      </div>
+
+      <div id="resumoPanel" class="card hidden">
+        <div class="row space">
+          <h3>Resumo do Recebedor</h3>
+          <button id="btnCloseResumo" class="btn btn-ghost">Fechar</button>
+        </div>
+        <div id="resumoContent">Selecione/filtre uma matrícula para visualizar o resumo.</div>
+      </div>
+
+      <div id="formCard" class="card hidden">
+        <h3>Criar/Editar Relatório (Admins)</h3>
+        <div class="grid">
+          <label>Data do caixa
+            <input id="dataCaixa" class="input sm" type="date">
+          </label>
+          <label>Matrícula do recebedor
+            <input id="matRel" class="input sm" type="text" placeholder="Ex: 6266">
+          </label>
+          <label>Valor folha (R$)
+            <input id="valorFolha" class="input sm money" type="number" step="0.01">
+          </label>
+          <label>Valor em dinheiro (R$)
+            <input id="valorDinheiro" class="input sm money" type="number" step="0.01">
+          </label>
+          <label>Sobra/Falta (R$)
+            <input id="sobraFalta" class="input sm money" type="number" step="0.01" disabled>
+          </label>
+          <label>Observação
+            <input id="observacao" class="input sm" type="text" maxlength="200">
+          </label>
+        </div>
+        <div class="row right">
+          <button id="btnSalvarRel" class="btn btn-metal btn-admin">Salvar</button>
+        </div>
+      </div>
+
+      <div id="listaRelatorios"></div>
+    </section>
   </main>
 
-  <section id="appSection" class="hidden">
-    <div class="toolbar">
-      <div class="info">
-        <span id="userInfo"></span>
-        <span id="roleBadge" class="badge"></span>
-      </div>
-      <div id="adminControls" class="hidden">
-        <button id="toggleCreateForm" class="btn btn-metal btn-admin">Novo Relatório</button>
-        <input id="adminFilterMat" class="input sm btn-admin" type="text" placeholder="Filtrar por matrícula" />
-        <button id="btnResumo" class="btn btn-ghost btn-admin">Resumo do Recebedor</button>
-      </div>
-    </div>
-
-    <div id="resumoPanel" class="card hidden">
-      <div class="row space">
-        <h3>Resumo do Recebedor</h3>
-        <button id="closeResumo" class="btn btn-ghost">Fechar</button>
-      </div>
-      <div id="resumoContent">Selecione uma matrícula no filtro acima.</div>
-    </div>
-
-    <div id="createForm" class="card hidden">
-      <h3>Criar Relatório (Admin)</h3>
-      <div class="grid">
-        <label>Data do caixa
-          <input id="dataCaixa" class="input sm" type="date" />
-        </label>
-        <label>Matrícula do recebedor
-          <input id="matRel" class="input sm" type="text" placeholder="Ex: 6266" />
-        </label>
-        <label>Valor folha (R$)
-          <input id="valorFolha" class="input sm money" type="number" step="0.01" inputmode="decimal" />
-        </label>
-        <label>Valor em dinheiro (R$)
-          <input id="valorDinheiro" class="input sm money" type="number" step="0.01" inputmode="decimal" />
-        </label>
-        <label>Sobra/Falta (R$)
-          <input id="sobraFalta" class="input sm money" type="number" step="0.01" inputmode="decimal" disabled />
-        </label>
-        <label>Observação
-          <input id="observacao" class="input sm" type="text" maxlength="200" />
-        </label>
-      </div>
-      <div class="row right">
-        <button id="saveRelatorio" class="btn btn-metal btn-admin">Salvar</button>
-      </div>
-    </div>
-
-    <div id="listaRelatorios"></div>
-  </section>
-
+  <!-- Modal Pós Conferência -->
   <div id="posModal" class="modal hidden">
     <div class="modal-content card">
       <div class="row space">
@@ -98,9 +109,9 @@
           <button id="modalSalvar" class="btn btn-metal btn-admin hidden">Salvar</button>
         </div>
       </div>
-      <textarea id="posTexto" class="input" rows="5" placeholder="Anotações do admin"></textarea>
+      <textarea id="posTexto" class="input" rows="5" placeholder="Somente admin pode editar"></textarea>
       <div class="row gap">
-        <input id="fileInput" type="file" class="hidden" accept="image/*" />
+        <input id="fileInput" type="file" class="hidden" accept="image/*">
         <button id="btnAnexar" class="btn btn-metal btn-admin hidden">Anexar imagem</button>
         <button id="btnVerAnexo" class="btn btn-ghost">Visualizar imagem anexada</button>
         <button id="btnExcluirAnexo" class="btn btn-ghost danger btn-admin hidden">Excluir imagem</button>

@@ -1,14 +1,5 @@
-
-function validateMovebussEmail(email) {
-  return email.endsWith("@movebuss.local");
-}
-
-import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
-import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, where, orderBy, limit, getDocs, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
-import { getStorage, ref, uploadBytes, getDownloadURL, deleteObject } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-storage.js";
-
-const firebaseConfig = {
+// ==== Firebase Config ====
+var firebaseConfig = {
   apiKey: "AIzaSyDtYzKI4ta7gzeqWxSQ6FMEu8A427islUQ",
   authDomain: "caixasv1.firebaseapp.com",
   projectId: "caixasv1",
@@ -17,326 +8,364 @@ const firebaseConfig = {
   appId: "1:545325374379:web:6d422f3e9af5f195df10ee",
   measurementId: "G-8K54YESCGD"
 };
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+const storage = firebase.storage();
 
-const app = initializeApp(firebaseConfig);
-const auth = getAuth(app);
-const db = getFirestore(app);
-const storage = getStorage(app);
+// ==== Helpers ====
+const qs = (sel) => document.querySelector(sel);
+const qsa = (sel) => document.querySelectorAll(sel);
+const fmtBRL = (n) => new Intl.NumberFormat('pt-BR', { style:'currency', currency:'BRL'}).format(Number(n||0));
+const isAdminMat = (mat) => ["6266","4144","70029"].includes(mat);
+const emailFromMat = (m) => `${m}@movebuss.local`;
 
-const BRL = new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});
-const ADM = ["6266","4144","70029"];
-const $ = (s)=>document.querySelector(s);
-const byId = (id)=>document.getElementById(id);
+// Inputs
+const inLoginMat = qs("#loginMatricula");
+const inLoginPwd = qs("#loginSenha");
+const inRegMat = qs("#regMatricula");
+const inRegNome = qs("#regNome");
+const inRegPwd = qs("#regSenha");
 
-function matriculaToEmail(m){ return `${m}@movebuss.local`; }
-function toFloat(v){ const n = parseFloat(v); return isNaN(n)?0:n; }
+// Views
+const authView = qs("#authView");
+const appView = qs("#appView");
+const adminControls = qs("#adminControls");
+const formCard = qs("#formCard");
+const resumoPanel = qs("#resumoPanel");
 
-// UI refs
-const authSection = byId('authSection');
-const appSection = byId('appSection');
-const logoutBtn = byId('logoutBtn');
-const loginBtn = byId('loginBtn');
-const showRegister = byId('showRegister');
-const cancelRegister = byId('cancelRegister');
-const registerBtn = byId('registerBtn');
-const adminControls = byId('adminControls');
-const toggleCreateForm = byId('toggleCreateForm');
-const createForm = byId('createForm');
-const listaRelatorios = byId('listaRelatorios');
-const userInfo = byId('userInfo');
-const roleBadge = byId('roleBadge');
-const btnResumo = byId('btnResumo');
-const closeResumo = byId('closeResumo');
-const resumoPanel = byId('resumoPanel');
+// ==== Auth UI ====
+qs("#btnShowRegister").addEventListener("click", ()=>{
+  qs("#registerCard").classList.remove("hidden");
+});
+qs("#btnCancelRegister").addEventListener("click", ()=>{
+  qs("#registerCard").classList.add("hidden");
+});
 
-// Modal Pós
-const posModal = byId('posModal');
-const posTexto = byId('posTexto');
-const modalSalvar = byId('modalSalvar');
-const modalFechar = byId('modalFechar');
-const btnAnexar = byId('btnAnexar');
-const btnVerAnexo = byId('btnVerAnexo');
-const btnExcluirAnexo = byId('btnExcluirAnexo');
-const fileInput = byId('fileInput');
-
-// Form relatório
-const dataCaixa = byId('dataCaixa');
-const matRel = byId('matRel');
-const valorFolha = byId('valorFolha');
-const valorDinheiro = byId('valorDinheiro');
-const sobraFalta = byId('sobraFalta');
-const observacao = byId('observacao');
-
-let CURRENT = { user:null, admin:false, matricula:null };
-
-onAuthStateChanged(auth, async (user)=>{
-  if(user){
-    const matricula = user.email.split('@')[0];
-    const admin = ADM.includes(matricula);
-    CURRENT = { user, admin, matricula };
-
-    // UI: toggle admin-only
-    document.querySelectorAll('.btn-admin').forEach(el=>{
-      el.classList.toggle('hidden', !admin);
-    });
-    adminControls.classList.toggle('hidden', !admin);
-
-    authSection.classList.add('hidden');
-    appSection.classList.remove('hidden');
-    logoutBtn.classList.remove('hidden');
-    userInfo.textContent = `Matrícula: ${matricula}`;
-    roleBadge.textContent = admin ? 'ADMIN' : 'USUÁRIO';
-
-    if(admin){
-      loadRelatoriosAdmin();
-    }else{
-      loadRelatoriosUser(matricula);
-    }
-  }else{
-    CURRENT = { user:null, admin:false, matricula:null };
-    authSection.classList.remove('hidden');
-    appSection.classList.add('hidden');
-    logoutBtn.classList.add('hidden');
+qs("#btnLogin").addEventListener("click", async ()=>{
+  const mat = inLoginMat.value.trim();
+  const pwd = inLoginPwd.value;
+  if(!mat || !pwd){ alert("Informe matrícula e senha"); return; }
+  const email = emailFromMat(mat);
+  try {
+    await auth.signInWithEmailAndPassword(email, pwd);
+  } catch(err){
+    alert("Erro no login: "+err.message);
   }
 });
 
-// Login / Cadastro
-loginBtn?.addEventListener('click', async ()=>{
-  const m = byId('loginMatricula').value.trim();
-  const s = byId('loginSenha').value.trim();
-  if(!m||!s) return alert('Informe matrícula e senha.');
-  try{ await signInWithEmailAndPassword(auth, matriculaToEmail(m), s); }
-  catch(e){ alert('Erro no login: '+e.message); }
+qs("#btnLogout").addEventListener("click", ()=> auth.signOut());
+
+qs("#btnRegister").addEventListener("click", async ()=>{
+  const mat = inRegMat.value.trim();
+  const nome = inRegNome.value.trim();
+  const pwd = inRegPwd.value;
+  const email = emailFromMat(mat);
+  if(!mat || !nome || !pwd){ alert("Preencha matrícula, nome e senha"); return; }
+  try {
+    // cria usuário no Auth
+    await auth.createUserWithEmailAndPassword(email, pwd).catch(e=>{ throw e; });
+    // cria/atualiza doc do usuário (permite self-create)
+    await db.collection("usuarios").doc(mat).set({
+      matricula: mat,
+      nome: nome,
+      email: email,
+      criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge:true });
+    alert("Usuário cadastrado!");
+    qs("#registerCard").classList.add("hidden");
+  } catch(err){
+    alert("Erro no cadastro: "+err.message);
+  }
 });
 
-showRegister?.addEventListener('click', ()=> byId('registerCard').classList.toggle('hidden'));
-cancelRegister?.addEventListener('click', ()=> byId('registerCard').classList.add('hidden'));
-registerBtn?.addEventListener('click', async ()=>{
-  const m = byId('regMatricula').value.trim();
-  const n = byId('regNome').value.trim();
-  const s = byId('regSenha').value.trim();
-  if(!m||!n||!s) return alert('Preencha todos os campos.');
-  try{
-    const cred = await createUserWithEmailAndPassword(auth, email, matriculaToEmail(m), s);
-    await setDoc(doc(db,'usuarios', cred.user.uid), { matricula:m, nome:n, isAdmin: ADM.includes(m) });
-    alert('Usuário cadastrado! Faça login.');
-    byId('registerCard').classList.add('hidden');
-  }catch(e){ alert('Erro no cadastro: '+e.message); }
+// ==== State ====
+let currentUser = null;
+let currentMat = null;
+let currentIsAdmin = false;
+
+auth.onAuthStateChanged(async (u)=>{
+  if(u){
+    currentUser = u;
+    currentMat = (u.email || "").split("@")[0];
+    currentIsAdmin = isAdminMat(currentMat);
+    qs("#userInfo").textContent = `Matrícula: ${currentMat}`;
+    qs("#roleBadge").textContent = currentIsAdmin ? "ADMIN" : "USUÁRIO";
+
+    authView.classList.add("hidden");
+    appView.classList.remove("hidden");
+    qs("#btnLogout").classList.remove("hidden");
+    if(currentIsAdmin) adminControls.classList.remove("hidden"); else adminControls.classList.add("hidden");
+
+    initApp();
+  } else {
+    currentUser = null;
+    authView.classList.remove("hidden");
+    appView.classList.add("hidden");
+    qs("#btnLogout").classList.add("hidden");
+  }
 });
 
-logoutBtn?.addEventListener('click', ()=> signOut(auth));
+// ==== App Logic ====
+function initApp(){
+  // Datas padrão BR
+  const hoje = new Date();
+  const yyyy = hoje.getFullYear();
+  const mm = String(hoje.getMonth()+1).padStart(2,'0');
+  const dd = String(hoje.getDate()).padStart(2,'0');
+  qs("#dataCaixa").value = `${yyyy}-${mm}-${dd}`;
 
-// Calcular sobra/falta
-[dataCaixa, valorFolha, valorDinheiro].forEach(el=> el?.addEventListener('input', ()=>{
-  const sf = toFloat(valorDinheiro.value) - toFloat(valorFolha.value);
-  sobraFalta.value = sf.toFixed(2);
-}));
+  // Eventos admin
+  qs("#btnToggleForm").onclick = ()=> formCard.classList.toggle("hidden");
+  qs("#btnResumo").onclick = ()=> resumoPanel.classList.toggle("hidden");
+  qs("#btnCloseResumo").onclick = ()=> resumoPanel.classList.add("hidden");
 
-// Salvar relatório (somente admin)
-byId('saveRelatorio')?.addEventListener('click', async ()=>{
-  if(!CURRENT.admin) return alert('Apenas admins podem criar relatórios.');
-  const dataStr = dataCaixa.value; const mat = matRel.value.trim();
-  if(!dataStr || !mat) return alert('Informe data e matrícula.');
-  const payload = {
-    data: dataStr,
-    criadoEm: new Date().toLocaleString('pt-BR'),
-    timestamp: serverTimestamp(),
-    matricula: mat,
-    valorFolha: toFloat(valorFolha.value),
-    valorDinheiro: toFloat(valorDinheiro.value),
-    sobraFalta: toFloat(valorDinheiro.value) - toFloat(valorFolha.value),
-    observacao: (observacao.value||'').trim(),
-    posTexto:'', posImgUrl:'', posEditado:false
+  // Cálculo sobra/falta
+  const calc = ()=>{
+    const vf = parseFloat(qs("#valorFolha").value||0);
+    const vd = parseFloat(qs("#valorDinheiro").value||0);
+    qs("#sobraFalta").value = (vd - vf).toFixed(2);
   };
-  try{
-    await addDoc(collection(db,'relatorios'), payload);
-    alert('Relatório salvo!');
-    createForm.classList.add('hidden');
-    loadRelatoriosAdmin();
-  }catch(e){ alert('Erro ao salvar: '+e.message); }
-});
+  ["valorFolha","valorDinheiro"].forEach(id=> qs("#"+id).addEventListener("input", calc));
 
-// Toggle criar form
-toggleCreateForm?.addEventListener('click', ()=>{
-  if(!CURRENT.admin) return;
-  createForm.classList.toggle('hidden');
-});
+  // Salvar relatório (ADMIN)
+  qs("#btnSalvarRel").onclick = async ()=>{
+    if(!currentIsAdmin){ alert("Apenas admins podem salvar relatórios."); return; }
+    const dataCaixa = qs("#dataCaixa").value;
+    const matricula = qs("#matRel").value.trim();
+    const valorFolha = parseFloat(qs("#valorFolha").value||0);
+    const valorDinheiro = parseFloat(qs("#valorDinheiro").value||0);
+    const sobraFalta = parseFloat(qs("#sobraFalta").value||0);
+    const observacao = qs("#observacao").value.trim();
 
-// Listagens
-async function loadRelatoriosUser(m){
-  listaRelatorios.innerHTML='';
-  const q = query(collection(db,'relatorios'), where('matricula','==', m), orderBy('timestamp','desc'));
-  const snap = await getDocs(q);
-  let count=0;
-  snap.forEach(docSnap=>{
-    const d = docSnap.data();
-    const el = renderRelatorio(docSnap.id, d, false);
-    if(count>=15){ el.querySelector('.kv').classList.add('hidden'); }
-    listaRelatorios.appendChild(el);
-    count++;
-  });
-  if(!snap.size) listaRelatorios.innerHTML='<div class="card">Nenhum relatório.</div>';
-}
+    if(!dataCaixa || !matricula){ alert("Informe data do caixa e matrícula."); return; }
 
-async function loadRelatoriosAdmin(filter=null){
-  listaRelatorios.innerHTML='';
-  let qBase = collection(db,'relatorios');
-  if(filter){ qBase = query(qBase, where('matricula','==', filter), orderBy('timestamp','desc')); }
-  else{ qBase = query(qBase, orderBy('timestamp','desc'), limit(20)); }
-  const snap = await getDocs(qBase);
-  snap.forEach(docSnap=> listaRelatorios.appendChild(renderRelatorio(docSnap.id, docSnap.data(), true)));
-  if(!snap.size) listaRelatorios.innerHTML='<div class="card">Nenhum relatório.</div>';
-}
-
-// Resumo
-byId('adminFilterMat')?.addEventListener('change', (e)=>{
-  if(!CURRENT.admin) return;
-  const v = e.target.value.trim();
-  loadRelatoriosAdmin(v || null);
-});
-btnResumo?.addEventListener('click', async ()=>{
-  if(!CURRENT.admin) return;
-  const m = byId('adminFilterMat').value.trim();
-  if(!m) return alert('Informe matrícula.');
-  const q = query(collection(db,'relatorios'), where('matricula','==', m));
-  const snap = await getDocs(q);
-  let total=0, sobras=[], faltas=[];
-  snap.forEach(s=>{
-    const d = s.data(); total += (d.valorFolha||0);
-    const sf = d.sobraFalta||0;
-    if(sf>=0) sobras.push(`${d.data}: ${sf.toFixed(2)}`); else faltas.push(`${d.data}: ${sf.toFixed(2)}`);
-  });
-  $('#resumoPanel').classList.remove('hidden');
-  $('#resumoContent').innerHTML = `
-    <div class="kv">
-      <div><b>Total do mês (folha):</b></div><div>R$ ${total.toFixed(2)}</div>
-      <div><b>Dias com sobra:</b></div><div>${sobras.join('<br>')||'-'}</div>
-      <div><b>Dias com falta:</b></div><div>${faltas.join('<br>')||'-'}</div>
-    </div>`;
-});
-closeResumo?.addEventListener('click', ()=> resumoPanel.classList.add('hidden'));
-
-// Render
-function renderRelatorio(id, d, isAdmin){
-  const wrap = document.createElement('div'); wrap.className='relatorio';
-  wrap.innerHTML = `
-    <div class="min-header">
-      <div><b>${d.data}</b> ${d.posEditado ? '<span class="tag-warning">verificar pós conferência</span>':''}</div>
-      <div class="row gap">
-        <button class="btn btn-ghost toggle">Esconder/Exibir</button>
-        ${isAdmin ? '<button class="btn btn-ghost btn-admin" data-edit>Editar relatório</button><button class="btn btn-ghost danger btn-admin" data-del>Excluir relatório</button>' : ''}
-        <button class="btn btn-metal" data-pos>Pós conferência</button>
-      </div>
-    </div>
-    <div class="kv">
-      <div>Data/Hora criação:</div><div>${d.criadoEm||'-'}</div>
-      <div>Matrícula:</div><div>${d.matricula}</div>
-      <div>Valor folha:</div><div>R$ ${(d.valorFolha||0).toFixed(2)}</div>
-      <div>Valor dinheiro:</div><div>R$ ${(d.valorDinheiro||0).toFixed(2)}</div>
-      <div>Sobra/Falta:</div><div>R$ ${(d.sobraFalta||0).toFixed(2)}</div>
-      <div>Observação:</div><div>${d.observacao||'-'}</div>
-    </div>
-  `;
-  const kv = wrap.querySelector('.kv');
-  wrap.querySelector('.toggle').addEventListener('click', ()=> kv.classList.toggle('hidden'));
-  wrap.querySelector('[data-pos]').addEventListener('click', ()=> openPosModal(id, d, isAdmin));
-  if(isAdmin){
-    wrap.querySelector('[data-edit]')?.addEventListener('click', ()=> editRelatorio(id, d));
-    wrap.querySelector('[data-del]')?.addEventListener('click', ()=> delRelatorio(id));
-  }
-  // Oculta botões admin se não for admin (defesa na UI)
-  if(!CURRENT.admin){ wrap.querySelectorAll('.btn-admin').forEach(b=> b.classList.add('hidden')); }
-  return wrap;
-}
-
-async function editRelatorio(id, d){
-  if(!CURRENT.admin) return;
-  createForm.classList.remove('hidden');
-  dataCaixa.value = d.data||'';
-  matRel.value = d.matricula||'';
-  valorFolha.value = d.valorFolha||0;
-  valorDinheiro.value = d.valorDinheiro||0;
-  sobraFalta.value = (d.sobraFalta||0).toFixed(2);
-  observacao.value = d.observacao||'';
-  byId('saveRelatorio').onclick = async ()=>{
-    try{
-      await updateDoc(doc(db,'relatorios', id), {
-        data: dataCaixa.value,
-        matricula: matRel.value.trim(),
-        valorFolha: toFloat(valorFolha.value),
-        valorDinheiro: toFloat(valorDinheiro.value),
-        sobraFalta: toFloat(valorDinheiro.value) - toFloat(valorFolha.value),
-        observacao: observacao.value.trim()
+    try {
+      await db.collection("relatorios").add({
+        dataCaixa,
+        matricula,
+        valorFolha,
+        valorDinheiro,
+        sobraFalta,
+        observacao,
+        posConferencia: "",
+        posConferenciaEditadoEm: null,
+        temPosConferencia: false,
+        criadoEm: firebase.firestore.FieldValue.serverTimestamp()
       });
-      alert('Relatório atualizado!');
-      createForm.classList.add('hidden');
-      loadRelatoriosAdmin();
-    }catch(e){ alert('Erro ao atualizar: '+e.message); }
+      alert("Relatório salvo!");
+      loadRelatorios();
+    } catch(err){
+      alert("Erro ao salvar relatório: "+err.message);
+    }
+  };
+
+  // Filtro admin por matrícula (client-side)
+  qs("#adminFilterMat").addEventListener("input", (e)=>{
+    const termo = e.target.value.trim().toLowerCase();
+    qsa(".relatorio").forEach(card=>{
+      const mat = (card.getAttribute("data-matricula")||"").toLowerCase();
+      card.style.display = (!termo || mat.includes(termo)) ? "block" : "none";
+    });
+  });
+
+  loadRelatorios();
+}
+
+// Carregar relatórios (admins veem todos; usuários veem só os próprios, últimos 15 expandidos)
+async function loadRelatorios(){
+  const list = qs("#listaRelatorios");
+  list.innerHTML = "";
+
+  let q = db.collection("relatorios").orderBy("criadoEm","desc");
+  if(!currentIsAdmin){
+    q = q.where("matricula","==", currentMat).orderBy("criadoEm","desc");
+  }
+  const snap = await q.get();
+  let count = 0;
+  snap.forEach(doc=>{
+    const d = doc.data();
+    const id = doc.id;
+    const isOwner = d.matricula === currentMat;
+    if(!currentIsAdmin && !isOwner) return;
+
+    count++;
+    const showExpanded = currentIsAdmin ? (count<=20) : (count<=15);
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "relatorio";
+    wrapper.setAttribute("data-matricula", d.matricula);
+
+    const header = document.createElement("div");
+    header.className = "min-header";
+    const dataLabel = d.dataCaixa || "-";
+    const posFlag = d.temPosConferencia ? '<span class="tag-warning">verificar pós conferência</span>' : "";
+    header.innerHTML = `<strong>${dataLabel} — ${d.matricula}</strong> ${posFlag}`;
+
+    const btns = document.createElement("div");
+    const btnToggle = document.createElement("button");
+    btnToggle.className = "btn btn-ghost";
+    btnToggle.textContent = showExpanded ? "Esconder" : "Exibir";
+
+    const btnPos = document.createElement("button");
+    btnPos.className = "btn btn-metal";
+    btnPos.textContent = "Pós conferência";
+    btnPos.onclick = ()=> openPosModal(id, d);
+
+    btns.appendChild(btnToggle);
+    btns.appendChild(btnPos);
+
+    if(currentIsAdmin){
+      const btnEdit = document.createElement("button");
+      btnEdit.className = "btn btn-metal";
+      btnEdit.textContent = "Editar relatório";
+      btnEdit.onclick = ()=> fillFormForEdit(id, d);
+
+      const btnDel = document.createElement("button");
+      btnDel.className = "btn btn-ghost danger";
+      btnDel.textContent = "Excluir relatório";
+      btnDel.onclick = ()=> deleteRelatorio(id);
+
+      btns.appendChild(btnEdit);
+      btns.appendChild(btnDel);
+    }
+
+    header.appendChild(btns);
+
+    const body = document.createElement("div");
+    body.className = "kv";
+    body.innerHTML = `
+      <div>Data do caixa:</div><div>${d.dataCaixa || "-"}</div>
+      <div>Valor folha:</div><div>${fmtBRL(d.valorFolha)}</div>
+      <div>Valor em dinheiro:</div><div>${fmtBRL(d.valorDinheiro)}</div>
+      <div>Sobra/Falta:</div><div>${fmtBRL(d.sobraFalta)}</div>
+      <div>Observação:</div><div>${d.observacao || "-"}</div>
+    `;
+    if(!showExpanded) body.classList.add("hidden");
+
+    btnToggle.onclick = ()=>{
+      const hidden = body.classList.toggle("hidden");
+      btnToggle.textContent = hidden ? "Exibir" : "Esconder";
+    };
+
+    wrapper.appendChild(header);
+    wrapper.appendChild(body);
+    list.appendChild(wrapper);
+  });
+}
+
+// Preencher form para editar (admin)
+function fillFormForEdit(id, d){
+  formCard.classList.remove("hidden");
+  qs("#dataCaixa").value = d.dataCaixa || "";
+  qs("#matRel").value = d.matricula || "";
+  qs("#valorFolha").value = d.valorFolha || 0;
+  qs("#valorDinheiro").value = d.valorDinheiro || 0;
+  qs("#sobraFalta").value = (d.sobraFalta||0).toFixed(2);
+  qs("#observacao").value = d.observacao || "";
+
+  // Salvar atualização
+  qs("#btnSalvarRel").onclick = async ()=>{
+    if(!currentIsAdmin){ alert("Apenas admins podem salvar relatórios."); return; }
+    try{
+      await db.collection("relatorios").doc(id).update({
+        dataCaixa: qs("#dataCaixa").value,
+        matricula: qs("#matRel").value.trim(),
+        valorFolha: parseFloat(qs("#valorFolha").value||0),
+        valorDinheiro: parseFloat(qs("#valorDinheiro").value||0),
+        sobraFalta: parseFloat(qs("#sobraFalta").value||0),
+        observacao: qs("#observacao").value.trim()
+      });
+      alert("Relatório atualizado!");
+      // restaurar ação padrão (create)
+      initApp();
+      loadRelatorios();
+    }catch(err){
+      alert("Erro ao atualizar: "+err.message);
+    }
   };
 }
 
-async function delRelatorio(id){
-  if(!CURRENT.admin) return;
-  if(!confirm('Excluir este relatório?')) return;
+// Excluir (admin)
+async function deleteRelatorio(id){
+  if(!currentIsAdmin){ alert("Apenas admins."); return; }
+  if(!confirm("Confirma excluir?")) return;
   try{
-    // Soft delete (mantém histórico; ajuste para deleteDoc se desejar remoção total)
-    await updateDoc(doc(db,'relatorios', id), { deleted:true });
-    alert('Relatório marcado como excluído.');
-    loadRelatoriosAdmin();
-  }catch(e){ alert('Erro ao excluir: '+e.message); }
+    await db.collection("relatorios").doc(id).delete();
+    loadRelatorios();
+  }catch(err){
+    alert("Erro ao excluir: "+err.message);
+  }
 }
 
-// Pós Conferência
-let POS_CTX = { id:null, data:null, isAdmin:false };
-async function openPosModal(id, d, isAdmin){
-  POS_CTX = { id, data:d, isAdmin };
-  posModal.classList.remove('hidden');
-  posTexto.value = d.posTexto || '';
-  modalSalvar.classList.toggle('hidden', !isAdmin);
-  btnAnexar.classList.toggle('hidden', !isAdmin);
-  btnExcluirAnexo.classList.toggle('hidden', !isAdmin);
-  const prev = document.getElementById('previewArea'); prev.innerHTML='';
-  if(d.posImgUrl){ const img=document.createElement('img'); img.src=d.posImgUrl; img.alt='Anexo'; prev.appendChild(img); }
+// ==== Pós Conferência ====
+let posCurrentId = null;
+function openPosModal(id, d){
+  posCurrentId = id;
+  const isAdmin = currentIsAdmin;
+  qs("#posModal").classList.remove("hidden");
+  qs("#posTexto").value = d.posConferencia || "";
+  qs("#modalSalvar").classList.toggle("hidden", !isAdmin);
+  qs("#btnAnexar").classList.toggle("hidden", !isAdmin);
+  qs("#btnExcluirAnexo").classList.toggle("hidden", !isAdmin);
+
+  qs("#modalFechar").onclick = ()=> qs("#posModal").classList.add("hidden");
+  qs("#btnAnexar").onclick = ()=> qs("#fileInput").click();
+  qs("#fileInput").onchange = uploadAnexo;
+  qs("#btnVerAnexo").onclick = ()=> viewAnexo(id);
+  qs("#btnExcluirAnexo").onclick = ()=> deleteAnexo(id);
+
+  qs("#modalSalvar").onclick = async ()=>{
+    if(!currentIsAdmin){ return; }
+    try{
+      await db.collection("relatorios").doc(id).update({
+        posConferencia: qs("#posTexto").value,
+        posConferenciaEditadoEm: firebase.firestore.FieldValue.serverTimestamp(),
+        temPosConferencia: true
+      });
+      alert("Pós conferência salva!");
+      qs("#posModal").classList.add("hidden");
+      loadRelatorios();
+    }catch(err){
+      alert("Erro ao salvar pós conferência: "+err.message);
+    }
+  };
 }
-modalFechar.addEventListener('click', ()=> posModal.classList.add('hidden'));
-modalSalvar.addEventListener('click', async ()=>{
-  if(!POS_CTX.isAdmin) return;
+
+async function uploadAnexo(e){
+  const file = e.target.files[0];
+  if(!file || !posCurrentId) return;
   try{
-    await updateDoc(doc(db,'relatorios', POS_CTX.id), { posTexto: posTexto.value, posEditado:true });
-    alert('Pós conferência salva!');
-    posModal.classList.add('hidden');
-    CURRENT.admin ? loadRelatoriosAdmin() : loadRelatoriosUser(CURRENT.matricula);
-  }catch(e){ alert('Erro ao salvar pós conferência: '+e.message); }
-});
-btnAnexar.addEventListener('click', ()=> fileInput.click());
-fileInput.addEventListener('change', async (e)=>{
-  if(!POS_CTX.isAdmin) return;
-  const file = e.target.files?.[0]; if(!file) return;
+    const ref = storage.ref().child(`anexos/${posCurrentId}/${file.name}`);
+    await ref.put(file);
+    alert("Imagem anexada!");
+  }catch(err){
+    alert("Erro no upload: "+err.message);
+  }
+}
+
+async function viewAnexo(id){
   try{
-    const r = ref(storage, `post_conferencia/${POS_CTX.id}/${file.name}`);
-    await uploadBytes(r, file);
-    const url = await getDownloadURL(r);
-    await updateDoc(doc(db,'relatorios', POS_CTX.id), { posImgUrl:url, posEditado:true });
-    openPosModal(POS_CTX.id, { ...POS_CTX.data, posImgUrl:url, posTexto:posTexto.value, posEditado:true }, true);
-  }catch(e){ alert('Erro ao anexar: '+e.message); }
-});
-btnVerAnexo.addEventListener('click', ()=>{
-  const img = document.querySelector('#previewArea img');
-  const url = img ? img.src : (POS_CTX.data?.posImgUrl||'');
-  if(!url) return alert('Sem imagem anexada.');
-  window.open(url, '_blank');
-});
-btnExcluirAnexo.addEventListener('click', async ()=>{
-  if(!POS_CTX.isAdmin) return;
-  if(!POS_CTX.data?.posImgUrl) return alert('Sem imagem.');
+    const listRef = storage.ref().child(`anexos/${id}`);
+    const res = await listRef.listAll();
+    if(res.items.length===0){ alert("Sem imagem anexada."); return; }
+    const url = await res.items[0].getDownloadURL();
+    const prev = qs("#previewArea");
+    prev.innerHTML = `<img src="${url}" alt="anexo">`;
+  }catch(err){
+    alert("Erro ao visualizar: "+err.message);
+  }
+}
+
+async function deleteAnexo(id){
+  if(!currentIsAdmin) return;
   try{
-    const path = POS_CTX.data.posImgUrl.split('/o/')[1].split('?')[0];
-    const storagePath = decodeURIComponent(path);
-    const r = ref(storage, storagePath);
-    await deleteObject(r);
-    await updateDoc(doc(db,'relatorios', POS_CTX.id), { posImgUrl:'', posEditado:true });
-    alert('Imagem excluída.');
-    posModal.classList.add('hidden');
-    CURRENT.admin ? loadRelatoriosAdmin() : loadRelatoriosUser(CURRENT.matricula);
-  }catch(e){ alert('Erro ao excluir imagem: '+e.message); }
-});
+    const listRef = storage.ref().child(`anexos/${id}`);
+    const res = await listRef.listAll();
+    await Promise.all(res.items.map(item=>item.delete()));
+    alert("Imagem(s) excluída(s).");
+    qs("#previewArea").innerHTML = "";
+  }catch(err){
+    alert("Erro ao excluir: "+err.message);
+  }
+}

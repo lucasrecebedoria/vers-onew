@@ -1,28 +1,32 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
+
     function isAdmin() {
       return request.auth != null && (
-        request.auth.token.email.matches('^(6266|4144|70029)@movebuss\\.local$')
+        request.auth.token.email.matches('^(6266|4144|70029)@movebuss\.local$')
       );
     }
-    
+
     function matFromEmail() {
       return request.auth.token.email.split('@')[0];
     }
 
-    // Coleção de usuários
+    // usuarios: permitir criação do próprio doc no primeiro cadastro;
+    // updates apenas por admin.
     match /usuarios/{mat} {
       allow read: if isAdmin() || (request.auth != null && mat == matFromEmail());
-      allow write: if isAdmin(); // só admin cadastra usuários
+      allow create: if request.auth != null
+                    && mat == matFromEmail()
+                    && !exists(/databases/$(database)/documents/usuarios/$(mat));
+      allow update, delete: if isAdmin();
     }
 
-    // Coleção de relatórios
+    // relatorios: apenas admins criam/editam/excluem;
+    // leitura: admin vê todos; usuário vê os seus.
     match /relatorios/{id} {
       allow read: if isAdmin() || (request.auth != null && resource.data.matricula == matFromEmail());
-      allow create: if isAdmin(); // só admin cria relatórios
-      allow update, delete: if isAdmin(); // só admin edita ou exclui
+      allow create, update, delete: if isAdmin();
     }
   }
 }
