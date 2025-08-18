@@ -1,0 +1,12 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    function isAdmin() {
+      return request.auth != null && request.auth.token.email.matches('^(6266|4144|70029)@movebuss\.local$');
+    }
+    match /post_conferencia/{allPaths=**} {
+      allow read: if request.auth != null;
+      allow write, delete: if isAdmin();
+    }
+  }
+}

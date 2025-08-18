@@ -1,0 +1,19 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null && (
+        request.auth.token.email.matches('^(6266|4144|70029)@movebuss\.local$')
+      );
+    }
+    function matFromEmail(){ return request.auth.token.email.split('@')[0]; }
+    match /usuarios/{mat} {
+      allow read: if isAdmin() || (request.auth != null && mat == matFromEmail());
+      allow write: if isAdmin();
+    }
+    match /relatorios/{id} {
+      allow read: if isAdmin() || (request.auth != null && resource.data.matricula == matFromEmail());
+      allow create, update, delete: if isAdmin();
+    }
+  }
+}
