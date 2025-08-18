@@ -1,3 +1,8 @@
+
+function validateMovebussEmail(email) {
+  return email.endsWith("@movebuss.local");
+}
+
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-app.js";
 import { getAuth, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, collection, addDoc, query, where, orderBy, limit, getDocs, serverTimestamp, updateDoc } from "https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore.js";
@@ -112,7 +117,7 @@ registerBtn?.addEventListener('click', async ()=>{
   const s = byId('regSenha').value.trim();
   if(!m||!n||!s) return alert('Preencha todos os campos.');
   try{
-    const cred = await createUserWithEmailAndPassword(auth, matriculaToEmail(m), s);
+    const cred = await createUserWithEmailAndPassword(auth, email, matriculaToEmail(m), s);
     await setDoc(doc(db,'usuarios', cred.user.uid), { matricula:m, nome:n, isAdmin: ADM.includes(m) });
     alert('Usuário cadastrado! Faça login.');
     byId('registerCard').classList.add('hidden');
